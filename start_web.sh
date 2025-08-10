@@ -257,8 +257,22 @@ install_project() {
         # 记录开始时间
         local start_time=$(date +%s)
         
-        # 使用简化安装，直接安装依赖
+        # 使用简化安装，先安装requirements.txt再安装项目
         echo -e "${BLUE}🚀 开始安装依赖包...${NC}"
+        
+        # 先安装requirements.txt中的依赖
+        if [ -f "requirements.txt" ]; then
+            echo -e "${CYAN}   第1步: 安装requirements.txt中的依赖包...${NC}"
+            if ! $PYTHON_CMD -m pip install -r requirements.txt; then
+                echo -e "${YELLOW}⚠️  requirements.txt安装失败，继续尝试项目安装...${NC}"
+            else
+                echo -e "${GREEN}   ✅ requirements.txt依赖安装成功${NC}"
+            fi
+            echo ""
+        fi
+        
+        # 再安装项目本身
+        echo -e "${CYAN}   第2步: 以开发模式安装项目...${NC}"
         if $PYTHON_CMD -m pip install -e .; then
             # 计算安装时间
             local end_time=$(date +%s)
@@ -330,7 +344,21 @@ except ImportError as e:
                 local update_start_time=$(date +%s)
                 
                 # 自动安装项目依赖
-                echo -e "${BLUE}� 开始安装依赖包...${NC}"
+                echo -e "${BLUE}🚀 开始安装依赖包...${NC}"
+                
+                # 先安装requirements.txt中的依赖
+                if [ -f "requirements.txt" ]; then
+                    echo -e "${CYAN}   第1步: 安装requirements.txt中的依赖包...${NC}"
+                    if ! $PYTHON_CMD -m pip install -r requirements.txt; then
+                        echo -e "${YELLOW}⚠️  requirements.txt安装失败，继续尝试项目安装...${NC}"
+                    else
+                        echo -e "${GREEN}   ✅ requirements.txt依赖安装成功${NC}"
+                    fi
+                    echo ""
+                fi
+                
+                # 再安装项目本身
+                echo -e "${CYAN}   第2步: 以开发模式安装项目...${NC}"
                 if $PYTHON_CMD -m pip install -e .; then
                     # 计算安装时间
                     local update_end_time=$(date +%s)
@@ -439,6 +467,19 @@ except ImportError as e:
         echo -e "${CYAN}   这个过程会重新下载和安装所有依赖，请稍等...${NC}"
         echo ""
         
+        # 先强制重新安装requirements.txt中的依赖
+        if [ -f "requirements.txt" ]; then
+            echo -e "${CYAN}   第1步: 强制重新安装requirements.txt中的依赖包...${NC}"
+            if ! $PYTHON_CMD -m pip install -r requirements.txt --force-reinstall; then
+                echo -e "${YELLOW}⚠️  requirements.txt强制重新安装失败，继续尝试项目安装...${NC}"
+            else
+                echo -e "${GREEN}   ✅ requirements.txt依赖强制重新安装成功${NC}"
+            fi
+            echo ""
+        fi
+        
+        # 再强制重新安装项目本身
+        echo -e "${CYAN}   第2步: 强制重新安装项目...${NC}"
         if $PYTHON_CMD -m pip install -e . --force-reinstall --no-deps; then
             echo ""
             echo -e "${GREEN}✅ 项目强制重新安装成功${NC}"
@@ -584,7 +625,7 @@ show_help() {
     echo "  如果启动时卡在依赖更新步骤："
     echo "    1. 按 Ctrl+C 中断当前进程"
     echo "    2. 使用: $0 --skip-update"
-    echo "  如果依赖有问题，请手动运行: pip install -e ."
+    echo "  如果依赖有问题，请手动运行: pip install -r requirements.txt && pip install -e ."
     echo "  首次使用建议运行完整安装: $0 (选择 y 进行依赖更新)"
     echo "  系统环境用户建议创建虚拟环境: python -m venv env && source env/bin/activate"
     echo ""
