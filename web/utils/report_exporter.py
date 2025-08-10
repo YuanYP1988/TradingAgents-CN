@@ -460,11 +460,11 @@ class ReportExporter:
             ]
         else:
             # 非中文内容使用原有策略
-        pdf_engines = [
-            ('wkhtmltopdf', 'HTML转PDF引擎，推荐安装'),
-            ('weasyprint', '现代HTML转PDF引擎'),
+            pdf_engines = [
+                ('wkhtmltopdf', 'HTML转PDF引擎，推荐安装'),
+                ('weasyprint', '现代HTML转PDF引擎'),
                 (None, '使用pandoc默认引擎')
-        ]
+            ]
 
         last_error = None
 
@@ -481,10 +481,10 @@ class ReportExporter:
                 if has_chinese and engine in ['xelatex', 'lualatex']:
                     # 使用中文优化参数
                     extra_args = self._get_pdf_extra_args_for_chinese()
-                if engine:
+                    if engine:
                         # 确保使用指定的引擎（可能已经在_get_pdf_extra_args_for_chinese中设置）
                         if f'--pdf-engine={engine}' not in extra_args:
-                    extra_args.append(f'--pdf-engine={engine}')
+                            extra_args.append(f'--pdf-engine={engine}')
                     logger.info(f"🇨🇳 使用中文优化参数: {extra_args}")
                 else:
                     # 使用标准参数
@@ -502,7 +502,7 @@ class ReportExporter:
                     logger.info("🇨🇳 使用中文兼容的内容清理")
                 else:
                     # 对于其他引擎，使用标准清理
-                cleaned_content = self._clean_markdown_for_pandoc(md_content)
+                    cleaned_content = self._clean_markdown_for_pandoc(md_content)
                     logger.info("🔧 使用标准内容清理")
 
                 # 使用pypandoc将markdown转换为PDF
@@ -565,7 +565,7 @@ class ReportExporter:
 4. 使用Markdown或Word格式导出作为替代方案
 """
         else:
-        error_msg = f"""PDF生成失败，最后错误: {last_error}
+            error_msg = f"""PDF生成失败，最后错误: {last_error}
 
 可能的解决方案:
 1. 安装wkhtmltopdf (推荐):
