@@ -47,6 +47,7 @@ try:
     import re
     import tempfile
     import os
+    import subprocess
     from pathlib import Path
 
     # 导入pypandoc（用于markdown转docx和pdf）
@@ -154,6 +155,108 @@ class ReportExporter:
             content = '# 分析报告\n\n' + content
 
         return content
+
+    def _clean_chinese_for_pdf(self, content: str) -> str:
+        """为PDF生成清理中文内容，确保LaTeX兼容性"""
+        if not content:
+            return ""
+            
+        # 对于包含中文的内容，我们不做字符替换，而是确保使用正确的LaTeX引擎
+        # 这个方法主要用于内容验证和基本清理
+        content = str(content)
+        
+        # 替换表情符号为文字描述，避免字体缺失警告
+        emoji_replacements = {
+            '🎯': '[目标]',
+            '📋': '[清单]',
+            '📊': '[图表]',
+            '📈': '[上升]',
+            '💰': '[金钱]',
+            '💭': '[思考]',
+            '📰': '[新闻]',
+            '⚠️': '[警告]',
+            '📄': '[文档]',
+            '📝': '[笔记]',
+            '✅': '[完成]',
+            '❌': '[错误]',
+            '💡': '[想法]',
+            '🔍': '[搜索]',
+            '🚀': '[火箭]',
+            '📁': '[文件夹]',
+            '🔧': '[工具]',
+            '🇨🇳': '[中国]',
+            '🐳': '[Docker]',
+            '➤': '→',  # 箭头符号
+            '🔴': '[红色]',
+            '🟡': '[黄色]',
+            '🟢': '[绿色]',
+            '🏛️': '[建筑]'
+        }
+        
+        for emoji, replacement in emoji_replacements.items():
+            content = content.replace(emoji, replacement)
+        
+        # 对于PDF生成，不要转义Markdown格式字符
+        # XeLaTeX可以正确处理这些字符，只需要转义真正会导致LaTeX问题的字符
+        
+        # 只转义在LaTeX中有特殊含义且不是Markdown格式的字符
+        # 注意：不转义 # 因为它是Markdown标题标记
+        latex_special_chars = {
+            '&': '\\&',
+            '%': '\\%',
+            '$': '\\$',
+            '_': '\\_',
+            '{': '\\{',
+            '}': '\\}'
+        }
+        
+        # 但是要保护已有的反斜杠，避免双重转义
+        content = content.replace('\\', '\\textbackslash{}')
+        
+        # 然后处理其他特殊字符
+        for char, replacement in latex_special_chars.items():
+            content = content.replace(char, replacement)
+        
+        return content
+
+    def _get_pdf_extra_args_for_chinese(self) -> list:
+        """获取中文PDF生成的额外参数"""
+        extra_args = ['--from=markdown-yaml_metadata_block']
+        
+        # 检查是否有xelatex可用
+        try:
+            import subprocess
+            result = subprocess.run(['which', 'xelatex'], capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.info("✅ 检测到xelatex，使用XeLaTeX引擎处理中文")
+                extra_args.extend([
+                    '--pdf-engine=xelatex',
+                    '--variable=CJKmainfont:STSong',  # macOS默认中文字体
+                    '--variable=mainfont:Times New Roman',
+                    '--variable=geometry:margin=2cm'
+                ])
+                return extra_args
+        except Exception as e:
+            logger.warning(f"检查xelatex失败: {e}")
+        
+        # 检查是否有lualatex可用
+        try:
+            result = subprocess.run(['which', 'lualatex'], capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.info("✅ 检测到lualatex，使用LuaLaTeX引擎处理中文")
+                extra_args.extend([
+                    '--pdf-engine=lualatex',
+                    '--variable=CJKmainfont:STSong',
+                    '--variable=mainfont:Times New Roman',
+                    '--variable=geometry:margin=2cm'
+                ])
+                return extra_args
+        except Exception as e:
+            logger.warning(f"检查lualatex失败: {e}")
+            
+        # 如果没有中文支持的LaTeX引擎，返回基础参数
+        logger.warning("⚠️ 未检测到支持中文的LaTeX引擎(xelatex/lualatex)")
+        return extra_args
 
     def generate_markdown_report(self, results: Dict[str, Any]) -> str:
         """生成Markdown格式的报告"""
@@ -341,11 +444,26 @@ class ReportExporter:
         md_content = self.generate_markdown_report(results)
         logger.info(f"✅ Markdown内容生成完成，长度: {len(md_content)} 字符")
 
-        # 简化的PDF引擎列表，优先使用最可能成功的
+        # 检测内容是否包含中文
+        has_chinese = bool(re.search(r'[\u4e00-\u9fff]', md_content))
+        logger.info(f"🇨🇳 检测到中文内容: {has_chinese}")
+
+        # 为中文优化的PDF引擎列表
+        if has_chinese:
+            logger.info("🇨🇳 使用中文优化的PDF生成策略")
+            pdf_engines = [
+                ('xelatex', 'XeLaTeX引擎，推荐用于中文'),
+                ('lualatex', 'LuaLaTeX引擎，中文支持良好'),
+                ('wkhtmltopdf', 'HTML转PDF引擎，无需LaTeX'),
+                ('weasyprint', '现代HTML转PDF引擎'),
+                (None, '使用pandoc默认引擎')
+            ]
+        else:
+            # 非中文内容使用原有策略
         pdf_engines = [
             ('wkhtmltopdf', 'HTML转PDF引擎，推荐安装'),
             ('weasyprint', '现代HTML转PDF引擎'),
-            (None, '使用pandoc默认引擎')  # 不指定引擎，让pandoc自己选择
+                (None, '使用pandoc默认引擎')
         ]
 
         last_error = None
@@ -353,30 +471,46 @@ class ReportExporter:
         for engine_info in pdf_engines:
             engine, description = engine_info
             try:
+                logger.info(f"🔄 尝试PDF引擎: {engine or '默认'} - {description}")
+                
                 # 创建临时文件用于PDF输出
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
                     output_file = tmp_file.name
 
-                # 使用禁用YAML解析的参数（与Word导出一致）
-                extra_args = ['--from=markdown-yaml_metadata_block']
-
-                # 如果指定了引擎，添加引擎参数
+                # 获取基础参数
+                if has_chinese and engine in ['xelatex', 'lualatex']:
+                    # 使用中文优化参数
+                    extra_args = self._get_pdf_extra_args_for_chinese()
                 if engine:
+                        # 确保使用指定的引擎（可能已经在_get_pdf_extra_args_for_chinese中设置）
+                        if f'--pdf-engine={engine}' not in extra_args:
                     extra_args.append(f'--pdf-engine={engine}')
-                    logger.info(f"🔧 使用PDF引擎: {engine}")
+                    logger.info(f"🇨🇳 使用中文优化参数: {extra_args}")
                 else:
-                    logger.info(f"🔧 使用默认PDF引擎")
+                    # 使用标准参数
+                    extra_args = ['--from=markdown-yaml_metadata_block']
+                    if engine:
+                        extra_args.append(f'--pdf-engine={engine}')
+                    logger.info(f"🔧 使用标准参数: {extra_args}")
 
-                logger.info(f"🔧 PDF参数: {extra_args}")
-
-                # 清理内容避免YAML解析问题（与Word导出一致）
+                # 清理内容
+                if has_chinese and engine in ['xelatex', 'lualatex']:
+                    # 对于支持中文的LaTeX引擎，使用专门的中文清理
+                    cleaned_content = self._clean_markdown_for_pandoc(md_content)
+                    # 额外清理表情符号和LaTeX特殊字符
+                    cleaned_content = self._clean_chinese_for_pdf(cleaned_content)
+                    logger.info("🇨🇳 使用中文兼容的内容清理")
+                else:
+                    # 对于其他引擎，使用标准清理
                 cleaned_content = self._clean_markdown_for_pandoc(md_content)
+                    logger.info("🔧 使用标准内容清理")
 
-                # 使用pypandoc将markdown转换为PDF - 禁用YAML解析
+                # 使用pypandoc将markdown转换为PDF
+                logger.info("🔄 开始pandoc转换...")
                 pypandoc.convert_text(
                     cleaned_content,
                     'pdf',
-                    format='markdown',  # 基础markdown格式
+                    format='markdown',
                     outputfile=output_file,
                     extra_args=extra_args
                 )
@@ -390,14 +524,14 @@ class ReportExporter:
                     # 清理临时文件
                     os.unlink(output_file)
 
-                    logger.info(f"✅ PDF生成成功，使用引擎: {engine or '默认'}")
+                    logger.info(f"✅ PDF生成成功，使用引擎: {engine or '默认'}, 文件大小: {len(pdf_content)} 字节")
                     return pdf_content
                 else:
                     raise Exception("PDF文件生成失败或为空")
 
             except Exception as e:
                 last_error = str(e)
-                logger.error(f"PDF引擎 {engine or '默认'} 失败: {e}")
+                logger.error(f"❌ PDF引擎 {engine or '默认'} 失败: {e}")
 
                 # 清理可能存在的临时文件
                 try:
@@ -409,6 +543,28 @@ class ReportExporter:
                 continue
 
         # 如果所有引擎都失败，提供详细的错误信息和解决方案
+        if has_chinese:
+            error_msg = f"""PDF生成失败，最后错误: {last_error}
+
+中文PDF生成解决方案:
+1. 安装XeLaTeX (推荐用于中文):
+   macOS: brew install mactex
+   Linux: sudo apt-get install texlive-xetex texlive-lang-chinese
+   Windows: 安装MiKTeX并启用XeLaTeX
+
+2. 安装中文字体:
+   macOS: 系统自带STSong字体
+   Linux: sudo apt-get install fonts-wqy-microhei fonts-wqy-zenhei
+   Windows: 确保安装了中文字体
+
+3. 安装wkhtmltopdf (替代方案):
+   macOS: brew install wkhtmltopdf
+   Linux: sudo apt-get install wkhtmltopdf
+   Windows: choco install wkhtmltopdf
+
+4. 使用Markdown或Word格式导出作为替代方案
+"""
+        else:
         error_msg = f"""PDF生成失败，最后错误: {last_error}
 
 可能的解决方案:

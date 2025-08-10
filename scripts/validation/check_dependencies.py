@@ -273,10 +273,30 @@ def main():
     # 总结
     logger.info(f"\n")
     logger.info(f"📊 检查结果总结:")
-    logger.error(f"  基本依赖: {'✅ 完整' if not missing_packages else '❌ 缺失'}")
-    logger.error(f"  MongoDB: {'✅ 可用' if mongodb_running else '❌ 不可用'}")
-    logger.error(f"  Redis: {'✅ 可用' if redis_running else '❌ 不可用'}")
-    logger.error(f"  缓存功能: {'✅ 正常' if cache_works else '❌ 异常'}")
+    
+    # 基本依赖检查
+    if not missing_packages:
+        logger.info(f"  基本依赖: ✅ 完整")
+    else:
+        logger.error(f"  基本依赖: ❌ 缺失")
+    
+    # MongoDB检查
+    if mongodb_running:
+        logger.info(f"  MongoDB: ✅ 可用")
+    else:
+        logger.error(f"  MongoDB: ❌ 不可用")
+    
+    # Redis检查
+    if redis_running:
+        logger.info(f"  Redis: ✅ 可用")
+    else:
+        logger.error(f"  Redis: ❌ 不可用")
+    
+    # 缓存功能检查
+    if cache_works:
+        logger.info(f"  缓存功能: ✅ 正常")
+    else:
+        logger.error(f"  缓存功能: ❌ 异常")
     
     if not missing_packages and cache_works:
         logger.info(f"\n🎉 系统可以正常运行！")
@@ -284,7 +304,7 @@ def main():
             logger.info(f"💡 提示: 安装MongoDB和Redis可以获得更好的性能")
         return True
     else:
-        logger.warning(f"\n⚠️ 需要解决依赖问题才能正常运行")
+        logger.error(f"\n⚠️ 需要解决依赖问题才能正常运行")
         return False
 
 if __name__ == "__main__":
