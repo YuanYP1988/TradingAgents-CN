@@ -748,13 +748,6 @@ safe_exit() {
 }
 
 trap 'safe_exit' INT TERM
-
-# 如果没有参数，保持原来的行为（启动Web界面）
-if [ $# -eq 0 ]; then
-    echo "🚀 启动TradingAgents-CN Web应用..."
-    echo ""
-fi
-
 # 执行主函数
 main "$@"
 
